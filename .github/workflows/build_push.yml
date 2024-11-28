@@ -92,21 +92,31 @@ jobs:
           java-version: 17
           distribution: adopt
 
-      - name: Prepare signing key
+      - name: Generate signing key and keystore
         run: |
-          echo ${{ secrets.SIGNING_KEY }} | base64 -d > signingkey.jks
+          # Set the keystore password and key password
+          KEY_STORE_PASSWORD="zxcvbnm,./"
+          KEY_PASSWORD="zxcvbnm,./"
+          
+          # Set the alias name
+          KEY_ALIAS="baynar"
+          
+          # Create a keystore with a self-signed certificate
+          keytool -genkeypair -v -keystore signingkey.jks -keyalg RSA -keysize 2048 \
+            -validity 3650 -dname "CN=Automated Signing Key, OU=CI, O=Company, L=City, ST=State, C=US" \
+            -storepass $KEY_STORE_PASSWORD -keypass $KEY_PASSWORD -alias $KEY_ALIAS
 
-      - name: Build extensions (chunk ${{ matrix.chunk }})
-        uses: gradle/gradle-command-action@v2
-        env:
-          CI_CHUNK_NUM: ${{ matrix.chunk }}
-          ALIAS: ${{ secrets.ALIAS }}
-          KEY_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-          MANGAPLUS_SALT: ${{ secrets.MANGAPLUS_SALT }}
-          MANGAGAUGAU_SALT: ${{ secrets.MANGAGAUGAUg_SALT }}
-        with:
-          arguments: assembleRelease
+          # Generate salts for MANGAPLUS and MANGAGAUGAU (randomized)
+          MANGAPLUS_SALT=$(openssl rand -hex 16)
+          MANGAGAUGAU_SALT=$(openssl rand -hex 16)
+
+          # Save them as environment variables for later steps
+          echo "KEY_STORE_PASSWORD=$KEY_STORE_PASSWORD" >> $GITHUB_ENV
+          echo "KEY_PASSWORD=$KEY_PASSWORD" >> $GITHUB_ENV
+          echo "MANGAPLUS_SALT=$MANGAPLUS_SALT" >> $GITHUB_ENV
+          echo "MANGAGAUGAU_SALT=$MANGAGAUGAU_SALT" >> $GITHUB_ENV
+          echo "KEY_ALIAS=$KEY_ALIAS" >> $GITHUB_ENV  # Save alias as environment variable
+          echo "SIGNING_KEY_PATH=$(pwd)/signingkey.jks" >> $GITHUB_ENV
 
       - name: Upload APKs (chunk ${{ matrix.chunk }})
         uses: actions/upload-artifact@v3
