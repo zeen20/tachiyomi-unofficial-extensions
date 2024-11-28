@@ -90,11 +90,11 @@ jobs:
       - name: Generate signing key and keystore
         run: |
           # Set the keystore password and key password
-          KEY_STORE_PASSWORD="zxcvbnm,./"
-          KEY_PASSWORD="zxcvbnm,./"
+          KEY_STORE_PASSWORD="${{ secrets.KEY_STORE_PASSWORD }}"
+          KEY_PASSWORD="${{ secrets.KEY_PASSWORD }}"
           
           # Set the alias name
-          KEY_ALIAS="baynar"
+          KEY_ALIAS="${{ secrets.KEY_ALIAS}}"
           
           # Create a keystore with a self-signed certificate
           keytool -genkeypair -v -keystore signingkey.jks -keyalg RSA -keysize 2048 \
