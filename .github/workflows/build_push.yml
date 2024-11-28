@@ -34,9 +34,7 @@ jobs:
 
       - name: Merge repos
         run: |
-          # rsync -ar --exclude .git private/ .
           rsync -arI --exclude .git public/ .
-
           rm -rf public
 
       - name: Validate Gradle Wrapper
@@ -50,8 +48,6 @@ jobs:
 
       - name: Get number of modules
         run: |
-          set -x
-
           echo "NUM_INDIVIDUAL_MODULES=$(./gradlew -q projects | grep '.*extensions\:.*\:.*' | wc -l)" >> $GITHUB_ENV
 
       - id: generate-matrices
@@ -67,6 +63,7 @@ jobs:
             console.log(`Modules: ${numIndividualModules} (${numIndividualChunks} chunks of ${chunkSize})`);
 
             core.setOutput('individualMatrix', { 'chunk': [...Array(numIndividualChunks).keys()] });
+
   build:
     name: Build individual modules
     needs: prepare
@@ -81,9 +78,7 @@ jobs:
 
       - name: Merge repos
         run: |
-          # rsync -ar --exclude .git private/ .
           rsync -arI --exclude .git public/ .
-
           rm -rf public
 
       - name: Set up JDK
@@ -117,6 +112,18 @@ jobs:
           echo "MANGAGAUGAU_SALT=$MANGAGAUGAU_SALT" >> $GITHUB_ENV
           echo "KEY_ALIAS=$KEY_ALIAS" >> $GITHUB_ENV  # Save alias as environment variable
           echo "SIGNING_KEY_PATH=$(pwd)/signingkey.jks" >> $GITHUB_ENV
+
+      - name: Build extensions (chunk ${{ matrix.chunk }})
+        uses: gradle/gradle-command-action@v2
+        env:
+          CI_CHUNK_NUM: ${{ matrix.chunk }}
+          ALIAS: ${{ env.KEY_ALIAS }}
+          KEY_STORE_PASSWORD: ${{ env.KEY_STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ env.KEY_PASSWORD }}
+          MANGAPLUS_SALT: ${{ env.MANGAPLUS_SALT }}
+          MANGAGAUGAU_SALT: ${{ env.MANGAGAUGAU_SALT }}
+        with:
+          arguments: assembleRelease
 
       - name: Upload APKs (chunk ${{ matrix.chunk }})
         uses: actions/upload-artifact@v3
