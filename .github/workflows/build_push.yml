@@ -89,13 +89,13 @@ jobs:
 
       - name: Generate signing key and keystore
         run: |
-          # Retrieve the keystore password and key password from GitHub Secrets
-          KEY_STORE_PASSWORD="${{ secrets.KEY_STORE_PASSWORD }}"
-          KEY_PASSWORD="${{ secrets.KEY_PASSWORD }}"
-
-          # Retrieve the alias name from GitHub Secrets
-          KEY_ALIAS="${{ secrets.KEY_ALIAS }}"
-
+          # Set the keystore password and key password
+          KEY_STORE_PASSWORD="zxcvbnm,./"
+          KEY_PASSWORD="zxcvbnm,./"
+          
+          # Set the alias name
+          KEY_ALIAS="baynar"
+          
           # Create a keystore with a self-signed certificate
           keytool -genkeypair -v -keystore signingkey.jks -keyalg RSA -keysize 2048 \
             -validity 3650 -dname "CN=Automated Signing Key, OU=CI, O=Company, L=City, ST=State, C=US" \
@@ -106,6 +106,8 @@ jobs:
           MANGAGAUGAU_SALT=$(openssl rand -hex 16)
 
           # Save them as environment variables for later steps
+          echo "KEY_STORE_PASSWORD=$KEY_STORE_PASSWORD" >> $GITHUB_ENV
+          echo "KEY_PASSWORD=$KEY_PASSWORD" >> $GITHUB_ENV
           echo "MANGAPLUS_SALT=$MANGAPLUS_SALT" >> $GITHUB_ENV
           echo "MANGAGAUGAU_SALT=$MANGAGAUGAU_SALT" >> $GITHUB_ENV
           echo "KEY_ALIAS=$KEY_ALIAS" >> $GITHUB_ENV  # Save alias as environment variable
