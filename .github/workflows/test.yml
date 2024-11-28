@@ -1,0 +1,185 @@
+name: test
+
+on:
+  workflow_dispatch:
+  repository_dispatch:
+    types: build_application
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - '**.md'
+      - '.github/workflows/issue_moderator.yml'
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+env:
+  CI_CHUNK_SIZE: 65
+
+jobs:
+  prepare:
+    name: Prepare job
+    runs-on: ubuntu-latest
+    outputs:
+      individualMatrix: ${{ steps.generate-matrices.outputs.individualMatrix }}
+    env:
+      CI_MODULE_GEN: true
+    steps:
+      - name: Clone repo
+        uses: actions/checkout@v3
+        with:
+          path: public
+
+      - name: Merge repos
+        run: |
+          rsync -arI --exclude .git public/ .
+          rm -rf public
+
+      - name: Validate Gradle Wrapper
+        uses: gradle/wrapper-validation-action@v1
+
+      - name: Set up JDK
+        uses: actions/setup-java@v3
+        with:
+          java-version: 17
+          distribution: adopt
+
+      - name: Get number of modules
+        run: |
+          echo "NUM_INDIVIDUAL_MODULES=$(./gradlew -q projects | grep '.*extensions\:.*\:.*' | wc -l)" >> $GITHUB_ENV
+
+      - id: generate-matrices
+        name: Create output matrices
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const numIndividualModules = process.env.NUM_INDIVIDUAL_MODULES;
+            const chunkSize = process.env.CI_CHUNK_SIZE;
+
+            const numIndividualChunks = Math.ceil(numIndividualModules / chunkSize);
+
+            console.log(`Modules: ${numIndividualModules} (${numIndividualChunks} chunks of ${chunkSize})`);
+
+            core.setOutput('individualMatrix', { 'chunk': [...Array(numIndividualChunks).keys()] });
+
+  build:
+    name: Build individual modules
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJSON(needs.prepare.outputs.individualMatrix) }}
+    steps:
+      - name: Clone repo
+        uses: actions/checkout@v3
+        with:
+          path: public
+
+      - name: Merge repos
+        run: |
+          rsync -arI --exclude .git public/ .
+          rm -rf public
+
+      - name: Set up JDK
+        uses: actions/setup-java@v3
+        with:
+          java-version: 17
+          distribution: adopt
+
+      - name: Generate signing key and keystore
+        run: |
+          # Set the keystore password and key password
+          KEY_STORE_PASSWORD="zxcvbnm,./"
+          KEY_PASSWORD="zxcvbnm,./"
+          
+          # Set the alias name
+          KEY_ALIAS="baynar"
+          
+          # Create a keystore with a self-signed certificate
+          keytool -genkeypair -v -keystore signingkey.jks -keyalg RSA -keysize 2048 \
+            -validity 3650 -dname "CN=Automated Signing Key, OU=CI, O=Company, L=City, ST=State, C=US" \
+            -storepass $KEY_STORE_PASSWORD -keypass $KEY_PASSWORD -alias $KEY_ALIAS
+
+          # Generate salts for MANGAPLUS and MANGAGAUGAU (randomized)
+          MANGAPLUS_SALT=$(openssl rand -hex 16)
+          MANGAGAUGAU_SALT=$(openssl rand -hex 16)
+
+          # Save them as environment variables for later steps
+          echo "KEY_STORE_PASSWORD=$KEY_STORE_PASSWORD" >> $GITHUB_ENV
+          echo "KEY_PASSWORD=$KEY_PASSWORD" >> $GITHUB_ENV
+          echo "MANGAPLUS_SALT=$MANGAPLUS_SALT" >> $GITHUB_ENV
+          echo "MANGAGAUGAU_SALT=$MANGAGAUGAU_SALT" >> $GITHUB_ENV
+          echo "KEY_ALIAS=$KEY_ALIAS" >> $GITHUB_ENV  # Save alias as environment variable
+          echo "SIGNING_KEY_PATH=$(pwd)/signingkey.jks" >> $GITHUB_ENV
+
+      - name: Build extensions (chunk ${{ matrix.chunk }})
+        uses: gradle/gradle-command-action@v2
+        env:
+          CI_CHUNK_NUM: ${{ matrix.chunk }}
+          ALIAS: ${{ env.KEY_ALIAS }}
+          KEY_STORE_PASSWORD: ${{ env.KEY_STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ env.KEY_PASSWORD }}
+          MANGAPLUS_SALT: ${{ env.MANGAPLUS_SALT }}
+          MANGAGAUGAU_SALT: ${{ env.MANGAGAUGAU_SALT }}
+        with:
+          arguments: assembleRelease
+
+      - name: Upload APKs (chunk ${{ matrix.chunk }})
+        uses: actions/upload-artifact@v3
+        if: "github.repository == 'zeen20/tachiyomi-unofficial-extensions'"
+        with:
+          name: "individual-apks-${{ matrix.chunk }}"
+          path: "**/*.apk"
+          retention-days: 1
+
+      - name: Clean up CI files
+        run: rm signingkey.jks
+
+  publish_repo:
+    name: Publish repo
+    needs:
+      - build
+    if: "github.repository == 'zeen20/tachiyomi-unofficial-extensions'"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download APK artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: ~/apk-artifacts
+
+      - name: Set up JDK
+        uses: actions/setup-java@v3
+        with:
+          java-version: 17
+          distribution: adopt
+
+      - name: Checkout master branch
+        uses: actions/checkout@v3
+        with:
+          ref: master
+
+      - name: Create repo artifacts
+        run: |
+          python ./.github/scripts/move-apks.py
+          INSPECTOR_LINK="$(curl -s "https://api.github.com/repos/keiyoushi/extensions-inspector/releases/latest" | jq -r '.assets[0].browser_download_url')"
+          curl -L "$INSPECTOR_LINK" -o ./Inspector.jar
+          java -jar ./Inspector.jar "repo/apk" "output.json" "tmp"
+          python ./.github/scripts/create-repo.py
+
+      - name: Deploy repo
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          branch: repo
+          folder: ./repo
+          clean-exclude: |
+            .nojekyll
+            index.html
+            repo.json
+          git-config-name: GitHub Actions
+          git-config-email: github-actions[bot]@users.noreply.github.com
+          commit-message: Update extensions repo
+
+      - name: Purge JSDelivr cache
+        run: |
+          curl https://purge.jsdelivr.net/gh/zeen20/tachiyomi-unofficial-extensions@repo/index.min.json
