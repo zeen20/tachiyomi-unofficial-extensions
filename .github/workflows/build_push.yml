@@ -110,7 +110,7 @@ jobs:
 
       - name: Upload APKs (chunk ${{ matrix.chunk }})
         uses: actions/upload-artifact@v3
-        if: "github.repository == 'beer-psi/tachiyomi-unofficial-extensions'"
+        if: "github.repository == 'zeen20/tachiyomi-unofficial-extensions'"
         with:
           name: "individual-apks-${{ matrix.chunk }}"
           path: "**/*.apk"
@@ -123,7 +123,7 @@ jobs:
     name: Publish repo
     needs:
       - build
-    if: "github.repository == 'beer-psi/tachiyomi-unofficial-extensions'"
+    if: "github.repository == 'zeen20/tachiyomi-unofficial-extensions'"
     runs-on: ubuntu-latest
     steps:
       - name: Download APK artifacts
@@ -165,4 +165,4 @@ jobs:
 
       - name: Purge JSDelivr cache
         run: |
-          curl https://purge.jsdelivr.net/gh/beer-psi/tachiyomi-unofficial-extensions@repo/index.min.json
+          curl https://purge.jsdelivr.net/gh/zeen20/tachiyomi-unofficial-extensions@repo/index.min.json
