@@ -1,7 +1,7 @@
 ext {
     extName = 'Arab Toons'
     extClass = '.ArabToons'
-    themePkg = 'madara'
+    themePkg = 'magapoke'
     baseUrl = 'https://arabtoons.net'
     overrideVersionCode = 0
     isNsfw = true
