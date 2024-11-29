@@ -1,0 +1,47 @@
+ext {
+    extName = 'MANGA Plus by SHUEISHA'
+    extClass = '.MangaPlusFactory'
+    extVersionCode = 14
+}
+
+apply from: "$rootDir/common.gradle"
+
+dependencies {
+    implementation(project(":lib-i18n"))
+}
+
+def securityKeySaltFileName = "src/all/mangaplus/src/io/github/beerpsi/tachiyomi/extension/all/mangaplus/SecurityKeySalt.kt"
+def securityKeySaltFile = new File(securityKeySaltFileName)
+def backupFile = new File(securityKeySaltFileName + "_bak")
+
+tasks.register('updateSecurityKeySalt') {
+    doLast {
+        def salt = System.env.MANGAPLUS_SALT
+
+        println("[MangaPlus] Setting salt to $salt")
+        securityKeySaltFile.renameTo(backupFile)
+        securityKeySaltFile.withPrintWriter {
+            it.println("// THIS FILE IS AUTO-GENERATED, DO NOT COMMIT")
+            it.println("package io.github.beerpsi.tachiyomi.extension.all.mangaplus")
+            it.println("const val SECURITY_KEY_SALT = \"$salt\"")
+        }
+    }
+}
+
+preBuild.dependsOn updateSecurityKeySalt
+
+tasks.register('restoreBackup') {
+    doLast {
+        if (backupFile.exists()) {
+            println("[MangaPlus] Restoring placeholder file")
+            securityKeySaltFile.delete()
+            backupFile.renameTo(securityKeySaltFile)
+        }
+    }
+}
+
+tasks.configureEach { task ->
+    if (task.name == "assembleDebug" || task.name == "assembleRelease") {
+        task.finalizedBy(restoreBackup)
+    }
+}
