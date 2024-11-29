@@ -1,0 +1,9 @@
+ext {
+    extName = 'Hadess'
+    extClass = '.Hadess'
+    themePkg = 'madara'
+    baseUrl = 'https://www.hadess.xyz'
+    overrideVersionCode = 0
+}
+
+apply from: "$rootDir/common.gradle"
